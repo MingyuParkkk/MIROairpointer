@@ -12,6 +12,7 @@
 
 #include <Wire.h>
 #include <MPU6050.h>
+
 /**********************************
     [+] Global & Const Variables
 **********************************/
@@ -78,49 +79,63 @@ void loop(){                                //Main Loop Proc
         
         if(digitalRead(Click_button) == LOW){              //Click Function
 
+            Serial1.print('*');
             Serial1.print(0);
             Serial1.print('/');
             Serial1.print(X);
             Serial1.print('/');
-            Serial1.println(Y);        
+            Serial1.print(Y);
+            Serial1.print('/');
+            Serial1.print('&');        
         }
 
         if(digitalRead(Drawing_button) == LOW){
-          
+
+            Serial1.print('*');
             Serial1.print(1);
-            Serial1.print("/");
+            Serial1.print('/');
             Serial1.print(X);
-            Serial1.print("/");
-            Serial1.println(Y);       
+            Serial1.print('/');
+            Serial1.print(Y);
+            Serial1.print('/');      
+            Serial1.print('&'); 
         }
 
         if(digitalRead(ZoomIn_button) == LOW){             //ZoomIn Function
 
+            Serial1.print('*');
             Serial1.print(2);
             Serial1.print('/');
             Serial1.print(X);
             Serial1.print('/');
-            Serial1.println(Y);        
+            Serial1.print(Y);
+            Serial1.print('/');
+            Serial1.print('&');        
         }
 
 
         if(digitalRead(Motion_button) == LOW){              //Motion Control
             
-
+            Serial1.print('*');
             Serial1.print(3);
             Serial1.print('/');
             Serial1.print(X);
             Serial1.print('/');
-            Serial1.println(Y);
+            Serial1.print(Y);
+            Serial1.print('/');
+            Serial1.print('&');
             digitalWrite(Lazer_button, HIGH);        
         }
         else{
 
+            Serial1.print('*');
             Serial1.print(4);
             Serial1.print('/');
             Serial1.print(X);
             Serial1.print('/');
-            Serial1.println(Y);        
+            Serial1.print(Y);
+            Serial1.print('/');
+            Serial1.print('&');        
             digitalWrite(Lazer_button, LOW);
         }
 
