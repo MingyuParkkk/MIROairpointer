@@ -1,91 +1,259 @@
+/***********************************
+    Title : MIRO airpointer project
+    Copyright(C) 2016 MIRO KyongPook Univ
+     
+    하현수, 박민규, 황인득,  이재훈, 이동은
+    update : 2016.12.05 12:56
+***********************************/
 
-/*
-    MIRO airpointer project
-    Copyright(C) 2016 MIRO
-    provider : GeekTree0101
-    update : 2016.10.24s
-*/
-//#include "Arduino.h"
+/**********************************
+       [+] Import Library
+**********************************/
+
 #include <Wire.h>
-#include <Mouse.h>
-#include <Keyboard.h>
 #include <MPU6050.h>
+#include <stdio.h>
+/**********************************
+    [+] Global & Const Variables
+**********************************/
 
+#define Motion_button 12
+#define ZoomIn_button 11
+#define Drawing_button 10             
+#define Next_Page_button 9
+#define Back_Page_button 8
+#define STATE_LED 7
+#define Lazer_button 6
 
-//Definition or const value area
+#define key_press_delay 30              //key & Mouse Motion delay time
+#define mouse_press_delay 50
+#define Hardware_delay 10               //Hardware Delay
+#define LOCK_DRURATION 200
+// Data protocol
+#define DATA_MOTION 1
+#define DATA_ZOOMIN 2
+#define DATA_DRAWING 3
+#define DATA_PASSPAGE 4
+#define DATA_BACKPAGE 5
+#define DATA_DEFAULT 7
+#define DATA_UPDATE 8
+/**********************************
+        [+] Function
+***********************************/
 
-//#define BUTTON_IO PORTB
-//#define BUTTON_DIR DDRB
+void Button_setup();                    //Pull-up Digital Button
+void MPU_setup();                       //MPU6050 Init Setup
+short Check_X(int Data);                //Calculate X position
+short Check_Y(int Data);                //Calculate Y position
 
-//Function area
+boolean drawing_flag = false;
+boolean zoomin_flag = false;
 
-void Button_setup();
-void MPU_setup();
-void Mouse_interface_setup();
-void Keyboard_interface_setup();
-void MPU_action_control(int16_t* value_array);
+//Program Locker
+unsigned int lock = 0;
+boolean lock_check  = false;
+unsigned short count_update = 0;
 
-//Setup
+void setup(){                               //Hardware Setup
 
-void setup(){
-
+    Serial1.begin(9600);                     //bluetooth serial 9600 baudrate
     Button_setup();
     MPU_setup();
-    Mouse_interface_setup();
-    Keyboard_interface_setup();
+    PORTE = 0x40;
+    delay(2000);
+    PORTE = 0x00;
 }
 
-//Main loop proc
+void loop(){                                //Main Loop Proc
 
-void loop(){
-
-    //XXX : Must import Low Battery System Cuz, overhead very big in this loop
-    int16_t* Acc_value;
-    Acc_value = (int16_t*)malloc(2*sizeof(int16_t));
+    //NOTE : Must import Low Battery System Cuz, overhead very big in this loop
+    
+    int16_t* Data_Stack;
+    Data_Stack = (int16_t*)malloc(7*sizeof(int16_t));
     
 
     while(1){
-    
+
+
+        /*
+         * Locker : 카운트 레지스터를 이용한 프로그래밍 적인 딜레이 연출
+         * No delay() API
+        */
+        if(lock_check == true){
+              
+              lock++;
+              
+              if(lock > LOCK_DRURATION){
+                lock = 0;
+                lock_check = false;
+                PORTE = 0x00;
+              }      
+        }
+        
+        short X = 0;
+        short Y = 0;
+        String packet = "";
+
         Wire.beginTransmission(0x68);         //Begin MPU
         Wire.write(0x3B);
         Wire.endTransmission(false);             //Sustain connection
         Wire.requestFrom(0x68, 14, true);
 
-        Acc_value[0] = Wire.read() << 8 | Wire.read();  // X pos data
-        Acc_value[1] = Wire.read() << 8 | Wire.read();  // Y pos data
+        Data_Stack[0] = Wire.read() << 8 | Wire.read();  // X acc data
+        Data_Stack[1] = Wire.read() << 8 | Wire.read();  // Y acc data
+        Data_Stack[2] = Wire.read() << 8 | Wire.read();   // Z acc data
+        Data_Stack[3] = Wire.read() << 8 | Wire.read();   // Temp
+        Data_Stack[4] = Wire.read() << 8 | Wire.read();   // X gyro data select
+        Data_Stack[5] = Wire.read() << 8 | Wire.read();   // Y gyro data
+        Data_Stack[6] = Wire.read() << 8 | Wire.read();   // Z gyro data select
 
-        MPU_action_control(Acc_value);
+        X = Check_X(Data_Stack[6]);
+        Y = Check_Y(Data_Stack[4]);
+       
 
-        if(digitalRead(8) == LOW){              //Button Click
+        if(digitalRead(Next_Page_button) == LOW && lock == 0){              //Click Function
 
-            Mouse.click(MOUSE_LEFT);
+            packet = packet + "*";
+            packet = packet  + DATA_PASSPAGE; 
+            packet = packet + "/";
+            packet = packet + X ;
+            packet = packet + "/";
+            packet = packet + Y;
+            packet = packet + "/";
+            packet = packet + "*";
+            Serial1.println(packet); 
+            
+            lock_check = true;
+            lock++;
+            PORTE = 0x40;
+        }
+        else if(digitalRead(Back_Page_button) == LOW && lock == 0){              //Click Function
+            
+            packet = packet + "*";
+            packet = packet  + DATA_BACKPAGE; 
+            packet = packet + "/";
+            packet = packet + X ;
+            packet = packet + "/";
+            packet = packet + Y;
+            packet = packet + "/";
+            packet = packet + "*";
+            Serial1.println(packet); 
+            
+            lock_check = true;
+            lock++;
+            PORTE = 0x40; 
+        }
+        else if(digitalRead(Drawing_button) == LOW  && lock == 0){
+
+            drawing_flag = ~drawing_flag + 2;
+            
+            packet = packet + "*";
+            packet = packet  + DATA_DRAWING ; 
+            packet = packet + "/";
+            packet = packet + drawing_flag ;
+            packet = packet + "/";
+            packet = packet + drawing_flag;
+            packet = packet + "/";
+            packet = packet + "*";
+            Serial1.println(packet);
+            
+            lock++;
+            lock_check = true;
+            PORTE = 0x40;
+            
+        }
+        else if(digitalRead(ZoomIn_button) == LOW  && lock == 0){             //ZoomIn Function
+
+            zoomin_flag = ~zoomin_flag + 2;
+            
+            packet = packet + "*";
+            packet = packet  + DATA_ZOOMIN; 
+            packet = packet + "/";
+            packet = packet + zoomin_flag ;
+            packet = packet + "/";
+            packet = packet + zoomin_flag;
+            packet = packet + "/";
+            packet = packet + "*";
+            Serial1.println(packet); 
+
+            lock++;
+            lock_check = true;
+            PORTE = 0x40;
+        }
+        else if(digitalRead(Motion_button) == LOW){              //Motion Control
+
+            packet = packet + "*";
+            packet = packet  + DATA_MOTION; 
+            packet = packet + "/";
+            packet = packet + X ;
+            packet = packet + "/";
+            packet = packet + Y;
+            packet = packet + "/";
+            packet = packet + "*";
+            Serial1.println(packet); 
+            
+        }
+        else{
+       
+            if( drawing_flag == true || zoomin_flag == true ){
+
+            packet = packet + "*";
+            packet = packet  + DATA_DEFAULT; 
+            packet = packet + "/";
+            packet = packet + X ;
+            packet = packet + "/";
+            packet = packet + Y;
+            packet = packet + "/";
+            packet = packet + "*";
+            Serial1.println(packet); 
+            
+            }
+        
         }
 
-        if(digitalRead(9) == LOW){              //Gyro action
+        count_update ++;
+        if(count_update >= 50){
+          
+            packet = packet + "*";
+            packet = packet  + DATA_UPDATE; 
+            packet = packet + "/";
+            packet = packet + zoomin_flag ;
+            packet = packet + "/";
+            packet = packet + drawing_flag ;
+            packet = packet + "/";
+            packet = packet + "*";
+            Serial1.println(packet); 
 
-            Mouse.move(Acc_value[0],Acc_value[1],0);
+            count_update = 0;
+          
         }
 
-        delay(100);
+       
     }
-
-
-    free(Acc_value);
+  
+    free(Data_Stack);                                     // Data-Stack memory free
 }
 
 
-// Function area
-void Button_setup(){                        //Pull-up Digital Button;
+void Button_setup(){                                      //Pull-up Digital Button;
 
-    //XXX : Must script base on DDR, PORT register
+    //FIXME : Must script base on DDR, PORT register
 
-    pinMode(8,INPUT);
-    pinMode(9,INPUT);
+    pinMode(Drawing_button,INPUT);  
+    pinMode(Next_Page_button ,INPUT);   
+    pinMode(ZoomIn_button,INPUT);   
+    pinMode(Motion_button,INPUT);   
+    pinMode(Back_Page_button , INPUT);
+    pinMode(Lazer_button,OUTPUT);  
+    pinMode(STATE_LED,OUTPUT);  
 
-    digitalWrite(8,HIGH);
-    digitalWrite(9,HIGH);
+    digitalWrite(Drawing_button,HIGH); 
+    digitalWrite(Next_Page_button ,HIGH);  
+    digitalWrite(ZoomIn_button,HIGH);  
+    digitalWrite(Back_Page_button, HIGH);
+    digitalWrite(Motion_button,HIGH); 
+
 }
-
 
 void MPU_setup(){                           //MPU6050 Init Setup
 
@@ -97,24 +265,60 @@ void MPU_setup(){                           //MPU6050 Init Setup
     delay(30);
 }
 
-void Mouse_interface_setup(){               //Mouse Init Setup
+short Check_X(int Data) {
 
-    Mouse.begin();
-    delay(30);
+            short Xval;  
+
+            if(Data > 1000) {
+
+              Xval = -2-Data / 1000;
+            }
+            else if( Data < -1000) {
+            
+              Xval = 2-Data / 1000;
+            }
+            else if(Data > 500 && Data < 1000)  {                
+              
+              Xval = -3;               
+            }
+            else if(Data > -1000 && Data < -500) {
+              
+              Xval = 3;
+            }
+            else {
+                
+              Xval = 0;
+            }
+            
+
+            return -Xval;
 }
 
-void Keyboard_interface_setup(){            //Keyboard Init Setup
 
-    Keyboard.begin();
-    delay(30);
-}
+short Check_Y(int Data) {
+  
+            short Yval;
 
+            if(Data > 1000) {
+            
+              Yval = Data / 1000;
+            }
+            else if(Data < -1000){
+            
+              Yval = Data / 1000;
+            }
+            else if(Data > 500 && Data < 1000)  {                
+              
+              Yval = 1;               
+            }
+            else if(Data > -1000 && Data < -500) {
+                
+                Yval = -1;
+             }
+            else {
+                
+                Yval = 0;
+            }
 
-void MPU_action_control(int16_t* value_array){                  //mouse pointer core
-
-
-    // Must script algorythm under O(n) 
-
-
-
-}
+            return Yval;
+ }
